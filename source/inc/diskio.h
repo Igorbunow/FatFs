@@ -25,6 +25,7 @@ typedef enum {
 /*---------------------------------------*/
 /* Prototypes for disk control functions */
 
+#include "ff_driver.h"
 
 DSTATUS disk_initialize (BYTE pdrv);
 DSTATUS disk_status (BYTE pdrv);

@@ -249,9 +249,11 @@
 #if FF_MULTI_PARTITION
 #define LD2PD(vol) VolToPart[vol].pd	/* Get physical drive number */
 #define LD2PT(vol) VolToPart[vol].pt	/* Get partition number (0:auto search, 1..:forced partition number) */
+#define LD2PE(vol) VolToPart[vol].pe	/* Get extended partition number (0:mbr partishin, 1..:extended partition number) */
 #else
 #define LD2PD(vol) (BYTE)(vol)	/* Each logical drive is associated with the same physical drive number */
 #define LD2PT(vol) 0			/* Auto partition search */
+#define LD2PE(vol) 0			/* N */
 #endif
 
 
@@ -915,7 +917,7 @@ static void unlock_fs (
 /*-----------------------------------------------------------------------*/
 
 static FRESULT chk_lock (	/* Check if the file can be accessed */
-	DIR* dp,		/* Directory object pointing the file to be checked */
+	DIR_FF* dp,		/* Directory object pointing the file to be checked */
 	int acc			/* Desired access type (0:Read mode open, 1:Write mode open, 2:Delete or rename) */
 )
 {
@@ -951,7 +953,7 @@ static int enq_lock (void)	/* Check if an entry is available for a new object */
 
 
 static UINT inc_lock (	/* Increment object open counter and returns its index (0:Internal error) */
-	DIR* dp,	/* Directory object pointing the file to register or increment */
+	DIR_FF* dp,	/* Directory object pointing the file to register or increment */
 	int acc		/* Desired access (0:Read, 1:Write, 2:Delete/Rename) */
 )
 {
@@ -1664,7 +1666,7 @@ static FRESULT dir_clear (	/* Returns FR_OK or FR_DISK_ERR */
 /*-----------------------------------------------------------------------*/
 
 static FRESULT dir_sdi (	/* FR_OK(0):succeeded, !=0:error */
-	DIR* dp,		/* Pointer to directory object */
+	DIR_FF* dp,		/* Pointer to directory object */
 	DWORD ofs		/* Offset of directory table */
 )
 {
@@ -1712,13 +1714,12 @@ static FRESULT dir_sdi (	/* FR_OK(0):succeeded, !=0:error */
 /*-----------------------------------------------------------------------*/
 
 static FRESULT dir_next (	/* FR_OK(0):succeeded, FR_NO_FILE:End of table, FR_DENIED:Could not stretch */
-	DIR* dp,				/* Pointer to the directory object */
+	DIR_FF* dp,				/* Pointer to the directory object */
 	int stretch				/* 0: Do not stretch table, 1: Stretch table if needed */
 )
 {
 	DWORD ofs, clst;
 	FATFS *fs = dp->obj.fs;
-
 
 	ofs = dp->dptr + SZDIRE;	/* Next entry */
 	if (ofs >= (DWORD)((FF_FS_EXFAT && fs->fs_type == FS_EXFAT) ? MAX_DIR_EX : MAX_DIR)) dp->sect = 0;	/* Disable it if the offset reached the max value */
@@ -1760,6 +1761,7 @@ static FRESULT dir_next (	/* FR_OK(0):succeeded, FR_NO_FILE:End of table, FR_DEN
 	}
 	dp->dptr = ofs;						/* Current entry */
 	dp->dir = fs->win + ofs % SS(fs);	/* Pointer to the entry in the win[] */
+	
 
 	return FR_OK;
 }
@@ -1773,7 +1775,7 @@ static FRESULT dir_next (	/* FR_OK(0):succeeded, FR_NO_FILE:End of table, FR_DEN
 /*-----------------------------------------------------------------------*/
 
 static FRESULT dir_alloc (	/* FR_OK(0):succeeded, !=0:error */
-	DIR* dp,				/* Pointer to the directory object */
+	DIR_FF* dp,				/* Pointer to the directory object */
 	UINT n_ent				/* Number of contiguous entries to allocate */
 )
 {
@@ -2097,7 +2099,7 @@ static DWORD xsum32 (	/* Returns 32-bit checksum */
 /*-----------------------------------*/
 
 static FRESULT load_xdir (	/* FR_INT_ERR: invalid entry block */
-	DIR* dp					/* Reading direcotry object pointing top of the entry block to load */
+	DIR_FF* dp					/* Reading direcotry object pointing top of the entry block to load */
 )
 {
 	FRESULT res;
@@ -2166,7 +2168,7 @@ static void init_alloc_info (
 /*------------------------------------------------*/
 
 static FRESULT load_obj_xdir (
-	DIR* dp,			/* Blank directory object to be used to access containing direcotry */
+	DIR_FF* dp,			/* Blank directory object to be used to access containing direcotry */
 	const FFOBJID* obj	/* Object with its containing directory information */
 )
 {
@@ -2195,7 +2197,7 @@ static FRESULT load_obj_xdir (
 /*----------------------------------------*/
 
 static FRESULT store_xdir (
-	DIR* dp				/* Pointer to the direcotry object */
+	DIR_FF* dp				/* Pointer to the direcotry object */
 )
 {
 	FRESULT res;
@@ -2273,7 +2275,7 @@ static void create_xdir (
 #define DIR_READ_LABEL(dp) dir_read(dp, 1)
 
 static FRESULT dir_read (
-	DIR* dp,		/* Pointer to the directory object */
+	DIR_FF* dp,		/* Pointer to the directory object */
 	int vol			/* Filtered by 0:file/directory or 1:volume label */
 )
 {
@@ -2351,7 +2353,7 @@ static FRESULT dir_read (
 /*-----------------------------------------------------------------------*/
 
 static FRESULT dir_find (	/* FR_OK(0):succeeded, !=0:error */
-	DIR* dp					/* Pointer to the directory object with the file name */
+	DIR_FF* dp					/* Pointer to the directory object with the file name */
 )
 {
 	FRESULT res;
@@ -2432,7 +2434,7 @@ static FRESULT dir_find (	/* FR_OK(0):succeeded, !=0:error */
 /*-----------------------------------------------------------------------*/
 
 static FRESULT dir_register (	/* FR_OK:succeeded, FR_DENIED:no free entry or too many SFN collision, FR_DISK_ERR:disk error */
-	DIR* dp						/* Target directory with object name to be created */
+	DIR_FF* dp						/* Target directory with object name to be created */
 )
 {
 	FRESULT res;
@@ -2459,7 +2461,7 @@ static FRESULT dir_register (	/* FR_OK:succeeded, FR_DENIED:no free entry or too
 			res = fill_last_frag(&dp->obj, dp->clust, 0xFFFFFFFF);	/* Fill the last fragment on the FAT if needed */
 			if (res != FR_OK) return res;
 			if (dp->obj.sclust != 0) {		/* Is it a sub-directory? */
-				DIR dj;
+				DIR_FF dj;
 
 				res = load_obj_xdir(&dj, &dp->obj);	/* Load the object status */
 				if (res != FR_OK) return res;
@@ -2538,7 +2540,7 @@ static FRESULT dir_register (	/* FR_OK:succeeded, FR_DENIED:no free entry or too
 /*-----------------------------------------------------------------------*/
 
 static FRESULT dir_remove (	/* FR_OK:Succeeded, FR_DISK_ERR:A disk error */
-	DIR* dp					/* Directory object pointing the entry to be removed */
+	DIR_FF* dp					/* Directory object pointing the entry to be removed */
 )
 {
 	FRESULT res;
@@ -2584,7 +2586,7 @@ static FRESULT dir_remove (	/* FR_OK:Succeeded, FR_DISK_ERR:A disk error */
 /*-----------------------------------------------------------------------*/
 
 static void get_fileinfo (
-	DIR* dp,			/* Pointer to the directory object */
+	DIR_FF* dp,			/* Pointer to the directory object */
 	FILINFO* fno		/* Pointer to the file information to be filled */
 )
 {
@@ -2799,7 +2801,7 @@ static int pattern_match (	/* 0:mismatched, 1:matched */
 /*-----------------------------------------------------------------------*/
 
 static FRESULT create_name (	/* FR_OK: successful, FR_INVALID_NAME: could not create */
-	DIR* dp,					/* Pointer to the directory object */
+	DIR_FF* dp,					/* Pointer to the directory object */
 	const TCHAR** path			/* Pointer to pointer to the segment in the path string */
 )
 {
@@ -3001,7 +3003,7 @@ static FRESULT create_name (	/* FR_OK: successful, FR_INVALID_NAME: could not cr
 /*-----------------------------------------------------------------------*/
 
 static FRESULT follow_path (	/* FR_OK(0): successful, !=0: error code */
-	DIR* dp,					/* Directory object to return last directory and found object */
+	DIR_FF* dp,					/* Directory object to return last directory and found object */
 	const TCHAR* path			/* Full-path string to find a file or directory */
 )
 {
@@ -3023,7 +3025,7 @@ static FRESULT follow_path (	/* FR_OK(0): successful, !=0: error code */
 	dp->obj.n_frag = 0;	/* Invalidate last fragment counter of the object */
 #if FF_FS_RPATH != 0
 	if (fs->fs_type == FS_EXFAT && dp->obj.sclust) {	/* exFAT: Retrieve the sub-directory's status */
-		DIR dj;
+		DIR_FF dj;
 
 		dp->obj.c_scl = fs->cdc_scl;
 		dp->obj.c_size = fs->cdc_size;
@@ -3235,7 +3237,7 @@ static DWORD make_rand (
 
 /* Check what the sector is */
 
-static UINT check_fs (	/* 0:FAT/FAT32 VBR, 1:exFAT VBR, 2:Not FAT and valid BS, 3:Not FAT and invalid BS, 4:Disk error */
+static FSRESULT check_fs (	/* 0:FAT/FAT32 VBR, 1:exFAT VBR, 2:Not FAT and valid BS, 3:Not FAT and invalid BS, 4:Disk error */
 	FATFS* fs,			/* Filesystem object */
 	LBA_t sect			/* Sector to load and check if it is an FAT-VBR or not */
 )
@@ -3245,15 +3247,15 @@ static UINT check_fs (	/* 0:FAT/FAT32 VBR, 1:exFAT VBR, 2:Not FAT and valid BS, 
 
 
 	fs->wflag = 0; fs->winsect = (LBA_t)0 - 1;		/* Invaidate window */
-	if (move_window(fs, sect) != FR_OK) return 4;	/* Load the boot sector */
+	if (move_window(fs, sect) != FR_OK) return FS_RES_DISK_ERR;	/* Load the boot sector */
 	sign = ld_word(fs->win + BS_55AA);
 #if FF_FS_EXFAT
-	if (sign == 0xAA55 && !memcmp(fs->win + BS_JmpBoot, "\xEB\x76\x90" "EXFAT   ", 11)) return 1;	/* It is an exFAT VBR */
+	if (sign == 0xAA55 && !memcmp(fs->win + BS_JmpBoot, "\xEB\x76\x90" "EXFAT   ", 11)) return FS_RES_EXFAT;	/* It is an exFAT VBR */
 #endif
 	b = fs->win[BS_JmpBoot];
 	if (b == 0xEB || b == 0xE9 || b == 0xE8) {	/* Valid JumpBoot code? (short jump, near jump or near call) */
 		if (sign == 0xAA55 && !memcmp(fs->win + BS_FilSysType32, "FAT32   ", 8)) {
-			return 0;	/* It is an FAT32 VBR */
+			return FS_RES_FAT;	/* It is an FAT32 VBR */
 		}
 		/* FAT volumes formatted with early MS-DOS lack BS_55AA and BS_FilSysType, so FAT VBR needs to be identified without them. */
 		w = ld_word(fs->win + BPB_BytsPerSec);
@@ -3265,27 +3267,33 @@ static UINT check_fs (	/* 0:FAT/FAT32 VBR, 1:exFAT VBR, 2:Not FAT and valid BS, 
 			&& ld_word(fs->win + BPB_RootEntCnt) != 0	/* Properness of root dir entries (MNBZ) */
 			&& (ld_word(fs->win + BPB_TotSec16) >= 128 || ld_dword(fs->win + BPB_TotSec32) >= 0x10000)	/* Properness of volume sectors (>=128) */
 			&& ld_word(fs->win + BPB_FATSz16) != 0) {	/* Properness of FAT size (MNBZ) */
-				return 0;	/* It can be presumed an FAT VBR */
+				return FS_RES_FAT;	/* It can be presumed an FAT VBR */
 		}
 	}
-	return sign == 0xAA55 ? 2 : 3;	/* Not an FAT VBR (valid or invalid BS) */
+	return sign == 0xAA55 ? FS_RES_NOFAT_BS : FS_RES_NOFAT_NOBS;	/* Not an FAT VBR (valid or invalid BS) */
 }
 
 
 /* Find an FAT volume */
 /* (It supports only generic partitioning rules, MBR, GPT and SFD) */
 
-static UINT find_volume (	/* Returns BS status found in the hosting drive */
+static FSRESULT find_volume (	/* Returns BS status found in the hosting drive */
 	FATFS* fs,		/* Filesystem object */
-	UINT part		/* Partition to fined = 0:auto, 1..:forced */
+	UINT part,		/* Partition to fined = 0:auto, 1..:forced */
+	UINT ext_part	/* Extended partishion number 0: main partishion, 1..:extended*/
 )
 {
 	UINT fmt, i;
 	DWORD mbr_pt[4];
+	BYTE SystemID;
+#if FF_EXTENDED_PARTISHIONS
+	DWORD Extended_LBA;
+	DWORD Extended_LBA_start;
+#endif //FF_EXTENDED_PARTISHIONS
 
 
 	fmt = check_fs(fs, 0);				/* Load sector 0 and check if it is an FAT VBR as SFD format */
-	if (fmt != 2 && (fmt >= 3 || part == 0)) return fmt;	/* Returns if it is an FAT VBR as auto scan, not a BS or disk error */
+	if (fmt != FS_RES_NOFAT_BS && (fmt >= FS_RES_NOFAT_NOBS || part == 0)) return fmt;	/* Returns if it is an FAT VBR as auto scan, not a BS or disk error */
 
 	/* Sector 0 is not an FAT VBR or forced partition number wants a partition */
 
@@ -3294,31 +3302,68 @@ static UINT find_volume (	/* Returns BS status found in the hosting drive */
 		DWORD n_ent, v_ent, ofs;
 		QWORD pt_lba;
 
-		if (move_window(fs, 1) != FR_OK) return 4;	/* Load GPT header sector (next to MBR) */
-		if (!test_gpt_header(fs->win)) return 3;	/* Check if GPT header is valid */
+		if (move_window(fs, 1) != FR_OK) return FS_RES_DISK_ERR;	/* Load GPT header sector (next to MBR) */
+		if (!test_gpt_header(fs->win)) return FS_RES_NOFAT_NOBS;	/* Check if GPT header is valid */
 		n_ent = ld_dword(fs->win + GPTH_PtNum);		/* Number of entries */
 		pt_lba = ld_qword(fs->win + GPTH_PtOfs);	/* Table location */
 		for (v_ent = i = 0; i < n_ent; i++) {		/* Find FAT partition */
-			if (move_window(fs, pt_lba + i * SZ_GPTE / SS(fs)) != FR_OK) return 4;	/* PT sector */
+			if (move_window(fs, pt_lba + i * SZ_GPTE / SS(fs)) != FR_OK) return FS_RES_DISK_ERR;	/* PT sector */
 			ofs = i * SZ_GPTE % SS(fs);												/* Offset in the sector */
 			if (!memcmp(fs->win + ofs + GPTE_PtGuid, GUID_MS_Basic, 16)) {	/* MS basic data partition? */
 				v_ent++;
 				fmt = check_fs(fs, ld_qword(fs->win + ofs + GPTE_FstLba));	/* Load VBR and check status */
-				if (part == 0 && fmt <= 1) return fmt;			/* Auto search (valid FAT volume found first) */
+				if (part == 0 && fmt <= FS_RES_EXFAT) return fmt;			/* Auto search (valid FAT volume found first) */
 				if (part != 0 && v_ent == part) return fmt;		/* Forced partition order (regardless of it is valid or not) */
 			}
 		}
-		return 3;	/* Not found */
+		return FS_RES_NOFAT_NOBS;	/* Not found */
 	}
 #endif
-	if (FF_MULTI_PARTITION && part > 4) return 3;	/* MBR has 4 partitions max */
+	if (FF_MULTI_PARTITION && part > 4) return FS_RES_NOFAT_NOBS;	/* MBR has 4 partitions max */
 	for (i = 0; i < 4; i++) {		/* Load partition offset in the MBR */
-		mbr_pt[i] = ld_dword(fs->win + MBR_Table + i * SZ_PTE + PTE_StLba);
+		mbr_pt[i] = ld_dword(fs->win + MBR_Table + i * SZ_PTE + PTE_StLba);		
 	}
 	i = part ? part - 1 : 0;		/* Table index to find first */
-	do {							/* Find an FAT volume */
-		fmt = mbr_pt[i] ? check_fs(fs, mbr_pt[i]) : 3;	/* Check if the partition is FAT */
-	} while (part == 0 && fmt >= 2 && ++i < 4);
+#if FF_EXTENDED_PARTISHIONS
+	SystemID = *(BYTE *)(fs->win + MBR_Table + i * SZ_PTE + PTE_System);
+	DEBUG_PRINT_(LOG_LEVEL_MAX, "info", 32 , " [%d] System ID: %d part %d\n", i, SystemID, part - 1);
+	if ((SystemID == 0x05) || (SystemID == 0x0f)){
+		DEBUG_PRINT_(LOG_LEVEL_MAX, "info", 32 , " [%d] System ID: %d part: %d LBA: %d %x\n", i, SystemID, part - 1, mbr_pt[i], mbr_pt[i]);
+		Extended_LBA_start = mbr_pt[i];
+		Extended_LBA = Extended_LBA_start;
+		for (i = 0; i < FF_EXTENDED_PARTISHIONS ; i++){
+			fmt = check_fs(fs, Extended_LBA);
+			DEBUG_PRINT_(LOG_LEVEL_MAX, "info", 32 , "  %d LBA: %d %x", fmt, Extended_LBA, Extended_LBA);
+			
+			SystemID 	  = *(BYTE *)(fs->win + MBR_Table + 0 * SZ_PTE + PTE_System);
+			Extended_LBA += ld_qword(fs->win + MBR_Table + 0 * SZ_PTE + PTE_StLba) ;
+			DEBUG_PRINT_(LOG_LEVEL_MAX, "info", 32 , " [%d] System ID: %d part: %d LBA: %d %x\n", i, SystemID, part - 1, Extended_LBA, Extended_LBA);
+			if (ext_part == (i + 1)) {
+				DEBUG_PRINT_(LOG_LEVEL_MAX, "info", 32 , " break;");
+				break;
+			}
+			SystemID 	  = *(BYTE *)(fs->win + MBR_Table + 1 * SZ_PTE + PTE_System);
+			Extended_LBA  = ld_qword(fs->win + MBR_Table + 1 * SZ_PTE + PTE_StLba) + Extended_LBA_start;
+			DEBUG_PRINT_(LOG_LEVEL_MAX, "info", 32 , " [%d] System ID: %d part: %d LBA: %d %x\n", i, SystemID, part - 1, Extended_LBA, Extended_LBA);
+			if (SystemID == 0x00){
+				DEBUG_PRINT_(LOG_LEVEL_MAX, "info", 32 , " break;");
+				break;
+			}
+		}
+		fs->extended = i + 1;
+		fmt = check_fs(fs, Extended_LBA);
+		DEBUG_PRINT_(LOG_LEVEL_MAX, "info", 32 , " System ID: %d  LBA: %d %x\n", SystemID, Extended_LBA, Extended_LBA);
+		fmt = (fmt == FS_RES_NOFAT_BS) ? FS_RES_EXTENDED : fmt;
+	}
+	else{
+#endif //FF_EXTENDED_PARTISHIONS
+		do {							/* Find an FAT volume */
+			fmt = mbr_pt[i] ? check_fs(fs, mbr_pt[i]) : 3;	/* Check if the partition is FAT */
+		} while (part == 0 && fmt >= FS_RES_NOFAT_BS && ++i < 4);
+#if  FF_EXTENDED_PARTISHIONS
+	}
+	DEBUG_PRINT_(LOG_LEVEL_MAX, "info", 32 , " fmt %d\n", fmt);
+#endif //FF_EXTENDED_PARTISHIONS
 	return fmt;
 }
 
@@ -3386,9 +3431,10 @@ static FRESULT mount_volume (	/* FR_OK(0): successful, !=0: an error occurred */
 #endif
 
 	/* Find an FAT volume on the drive */
-	fmt = find_volume(fs, LD2PT(vol));
-	if (fmt == 4) return FR_DISK_ERR;		/* An error occured in the disk I/O layer */
-	if (fmt >= 2) return FR_NO_FILESYSTEM;	/* No FAT volume is found */
+	fmt = find_volume(fs, LD2PT(vol), LD2PE(vol));
+	if (fmt == FS_RES_DISK_ERR) return FR_DISK_ERR;		/* An error occured in the disk I/O layer */
+	if (fmt == FS_RES_EXTENDED) return FR_PARTISHION_EXTENDED;		/* An error occured in the disk I/O layer */
+	if (fmt >= FS_RES_NOFAT_BS) return FR_NO_FILESYSTEM;	/* No FAT volume is found */
 	bsect = fs->winsect;					/* Volume offset */
 
 	/* An FAT volume is found (bsect). Following code initializes the filesystem object */
@@ -3657,7 +3703,7 @@ FRESULT f_open (
 )
 {
 	FRESULT res;
-	DIR dj;
+	DIR_FF dj;
 	FATFS *fs;
 #if !FF_FS_READONLY
 	DWORD cl, bcs, clst, tm;
@@ -4096,7 +4142,7 @@ FRESULT f_sync (
 					res = fill_last_frag(&fp->obj, fp->clust, 0xFFFFFFFF);	/* Fill last fragment on the FAT if needed */
 				}
 				if (res == FR_OK) {
-					DIR dj;
+					DIR_FF dj;
 					DEF_NAMBUF
 
 					INIT_NAMBUF(fs);
@@ -4210,7 +4256,7 @@ FRESULT f_chdir (
 	UINT i;
 #endif
 	FRESULT res;
-	DIR dj;
+	DIR_FF dj;
 	FATFS *fs;
 	DEF_NAMBUF
 
@@ -4270,7 +4316,7 @@ FRESULT f_getcwd (
 )
 {
 	FRESULT res;
-	DIR dj;
+	DIR_FF dj;
 	FATFS *fs;
 	UINT i, n;
 	DWORD ccl;
@@ -4529,7 +4575,7 @@ FRESULT f_lseek (
 /*-----------------------------------------------------------------------*/
 
 FRESULT f_opendir (
-	DIR* dp,			/* Pointer to directory object to create */
+	DIR_FF* dp,			/* Pointer to directory object to create */
 	const TCHAR* path	/* Pointer to the directory path */
 )
 {
@@ -4595,7 +4641,7 @@ FRESULT f_opendir (
 /*-----------------------------------------------------------------------*/
 
 FRESULT f_closedir (
-	DIR *dp		/* Pointer to the directory object to be closed */
+	DIR_FF *dp		/* Pointer to the directory object to be closed */
 )
 {
 	FRESULT res;
@@ -4625,14 +4671,13 @@ FRESULT f_closedir (
 /*-----------------------------------------------------------------------*/
 
 FRESULT f_readdir (
-	DIR* dp,			/* Pointer to the open directory object */
+	DIR_FF* dp,			/* Pointer to the open directory object */
 	FILINFO* fno		/* Pointer to file information to return */
 )
 {
 	FRESULT res;
 	FATFS *fs;
 	DEF_NAMBUF
-
 
 	res = validate(&dp->obj, &fs);	/* Check validity of the directory object */
 	if (res == FR_OK) {
@@ -4644,7 +4689,7 @@ FRESULT f_readdir (
 			if (res == FR_NO_FILE) res = FR_OK;	/* Ignore end of directory */
 			if (res == FR_OK) {				/* A valid entry is found */
 				get_fileinfo(dp, fno);		/* Get the object information */
-				res = dir_next(dp, 0);		/* Increment index for next */
+				res = dir_next(dp, 0);		/* Increment index for next */				
 				if (res == FR_NO_FILE) res = FR_OK;	/* Ignore end of directory now */
 			}
 			FREE_NAMBUF();
@@ -4661,7 +4706,7 @@ FRESULT f_readdir (
 /*-----------------------------------------------------------------------*/
 
 FRESULT f_findnext (
-	DIR* dp,		/* Pointer to the open directory object */
+	DIR_FF* dp,		/* Pointer to the open directory object */
 	FILINFO* fno	/* Pointer to the file information structure */
 )
 {
@@ -4686,7 +4731,7 @@ FRESULT f_findnext (
 /*-----------------------------------------------------------------------*/
 
 FRESULT f_findfirst (
-	DIR* dp,				/* Pointer to the blank directory object */
+	DIR_FF* dp,				/* Pointer to the blank directory object */
 	FILINFO* fno,			/* Pointer to the file information structure */
 	const TCHAR* path,		/* Pointer to the directory to open */
 	const TCHAR* pattern	/* Pointer to the matching pattern */
@@ -4718,7 +4763,7 @@ FRESULT f_stat (
 )
 {
 	FRESULT res;
-	DIR dj;
+	DIR_FF dj;
 	DEF_NAMBUF
 
 
@@ -4894,7 +4939,7 @@ FRESULT f_unlink (
 )
 {
 	FRESULT res;
-	DIR dj, sdj;
+	DIR_FF dj, sdj;
 	DWORD dclst = 0;
 	FATFS *fs;
 #if FF_FS_EXFAT
@@ -4988,7 +5033,7 @@ FRESULT f_mkdir (
 )
 {
 	FRESULT res;
-	DIR dj;
+	DIR_FF dj;
 	FFOBJID sobj;
 	FATFS *fs;
 	DWORD dcl, pcl, tm;
@@ -5073,7 +5118,7 @@ FRESULT f_rename (
 )
 {
 	FRESULT res;
-	DIR djo, djn;
+	DIR_FF djo, djn;
 	FATFS *fs;
 	BYTE buf[FF_FS_EXFAT ? SZDIRE * 2 : SZDIRE], *dir;
 	LBA_t sect;
@@ -5121,7 +5166,7 @@ FRESULT f_rename (
 #endif
 			{	/* At FAT/FAT32 volume */
 				memcpy(buf, djo.dir, SZDIRE);			/* Save directory entry of the object */
-				memcpy(&djn, &djo, sizeof (DIR));		/* Duplicate the directory object */
+				memcpy(&djn, &djo, sizeof (DIR_FF));		/* Duplicate the directory object */
 				res = follow_path(&djn, path_new);		/* Make sure if new object name is not in use */
 				if (res == FR_OK) {						/* Is new name already in use by any other object? */
 					res = (djn.obj.sclust == djo.obj.sclust && djn.dptr == djo.dptr) ? FR_NO_FILE : FR_EXIST;
@@ -5184,7 +5229,7 @@ FRESULT f_chmod (
 )
 {
 	FRESULT res;
-	DIR dj;
+	DIR_FF dj;
 	FATFS *fs;
 	DEF_NAMBUF
 
@@ -5230,7 +5275,7 @@ FRESULT f_utime (
 )
 {
 	FRESULT res;
-	DIR dj;
+	DIR_FF dj;
 	FATFS *fs;
 	DEF_NAMBUF
 
@@ -5265,6 +5310,32 @@ FRESULT f_utime (
 #endif	/* FF_USE_CHMOD && !FF_FS_READONLY */
 
 
+#if FF_EXTENDED_PARTISHIONS
+/*-----------------------------------------------------------------------*/
+/* Get extended partishions count                                        */
+/*-----------------------------------------------------------------------*/
+
+FRESULT f_getextended_count(
+	const TCHAR* path,	/* Logical drive number */
+	UINT* count			/* Count of extended partishions */
+)
+{
+	FRESULT res;
+	FATFS *fs;
+	
+	*count = 0;
+	/* Get logical drive */
+	res = mount_volume(&path, &fs, 0);
+	if (res == FR_PARTISHION_EXTENDED){
+		*count = fs->extended;
+		res = FR_OK;
+	}
+	
+	return res;
+}
+
+#endif	//FF_EXTENDED_PARTISHIONS
+
 
 #if FF_USE_LABEL
 /*-----------------------------------------------------------------------*/
@@ -5278,14 +5349,14 @@ FRESULT f_getlabel (
 )
 {
 	FRESULT res;
-	DIR dj;
+	DIR_FF dj;
 	FATFS *fs;
 	UINT si, di;
 	WCHAR wc;
 
 	/* Get logical drive */
 	res = mount_volume(&path, &fs, 0);
-
+DEBUG_PRINT_(LOG_LEVEL_MAX, "info", 32 , " fmt %d\n", res);
 	/* Get volume label */
 	if (res == FR_OK && label) {
 		dj.obj.fs = fs; dj.obj.sclust = 0;	/* Open root directory */
@@ -5373,7 +5444,7 @@ FRESULT f_setlabel (
 )
 {
 	FRESULT res;
-	DIR dj;
+	DIR_FF dj;
 	FATFS *fs;
 	BYTE dirvn[22];
 	UINT di;
@@ -5649,7 +5720,6 @@ FRESULT f_forward (
 /* Create FAT/exFAT volume (with sub-functions)                          */
 /*-----------------------------------------------------------------------*/
 
-#define N_SEC_TRACK 63			/* Sectors per track for determination of drive CHS */
 #define	GPT_ALIGN	0x100000	/* Alignment of partitions in GPT [byte] (>=128KB) */
 #define GPT_ITEMS	128			/* Number of GPT table size (>=128, sector aligned) */
 
@@ -5660,7 +5730,8 @@ static FRESULT create_partition (
 	BYTE drv,			/* Physical drive number */
 	const LBA_t plst[],	/* Partition list */
 	BYTE sys,			/* System ID (for only MBR, temp setting) */
-	BYTE* buf			/* Working buffer for a sector */
+	BYTE* buf,			/* Working buffer for a sector */
+	BYTE n_sec_track	/* Sectors per track for determination of drive CHS. Default 63 */
 )
 {
 	UINT i, cy;
@@ -5671,6 +5742,10 @@ static FRESULT create_partition (
 
 	/* Get physical drive size */
 	if (disk_ioctl(drv, GET_SECTOR_COUNT, &sz_drv) != RES_OK) return FR_DISK_ERR;
+	
+	if (n_sec_track == 0){
+		n_sec_track = N_SEC_TRACK;
+	}
 
 #if FF_LBA64
 	if (sz_drv >= FF_MIN_GPT) {	/* Create partitions in GPT format */
@@ -5757,7 +5832,7 @@ static FRESULT create_partition (
 #endif
 	{	/* Create partitions in MBR format */
 		sz_drv32 = (DWORD)sz_drv;
-		n_sc = N_SEC_TRACK;				/* Determine drive CHS without any consideration of the drive geometry */
+		n_sc = n_sec_track;				/* Determine drive CHS without any consideration of the drive geometry */
 		for (n_hd = 8; n_hd != 0 && sz_drv32 / n_hd / n_sc > 1024; n_hd *= 2) ;
 		if (n_hd == 0) n_hd = 255;		/* Number of heads needs to be <256 */
 
@@ -5819,7 +5894,7 @@ FRESULT f_mkfs (
 	int vol;
 	DSTATUS ds;
 	FRESULT fr;
-
+	BYTE n_sec_track;
 
 	/* Check mounted drive and clear work area */
 	vol = get_ldnumber(&path);					/* Get target logical drive */
@@ -5842,6 +5917,7 @@ FRESULT f_mkfs (
 #else
 	ss = FF_MAX_SS;
 #endif
+	n_sec_track = (opt->n_sec_track == 0) ? N_SEC_TRACK : opt->n_sec_track;
 	/* Options for FAT sub-type and FAT parameters */
 	fsopt = opt->fmt & (FM_ANY | FM_SFD);
 	n_fat = (opt->n_fat >= 1 && opt->n_fat <= 2) ? opt->n_fat : 1;
@@ -5905,8 +5981,8 @@ FRESULT f_mkfs (
 			} else
 #endif
 			{	/* Partitioning is in MBR */
-				if (sz_vol > N_SEC_TRACK) {
-					b_vol = N_SEC_TRACK; sz_vol -= b_vol;	/* Estimated partition offset and size */
+				if (sz_vol > n_sec_track) {
+					b_vol = n_sec_track; sz_vol -= b_vol;	/* Estimated partition offset and size */
 				}
 			}
 		}
@@ -6124,7 +6200,11 @@ FRESULT f_mkfs (
 					n = (n_clst * 3 + 1) / 2 + 3;	/* FAT size [byte] */
 				}
 				sz_fat = (n + ss - 1) / ss;		/* FAT size [sector] */
-				sz_rsv = 1;						/* Number of reserved sectors */
+#if FF_FAT_RESERVE_EQUAL_TABLE == 1
+				sz_rsv = sz_fat + FF_FAT_RESERVE_SECTORS;	/* Number of reserved sectors */
+#else
+				sz_rsv = FF_FAT_RESERVE_SECTORS;		/* Number of reserved sectors */
+#endif
 				sz_dir = (DWORD)n_root * SZDIRE / ss;	/* Root dir size [sector] */
 			}
 			b_fat = b_vol + sz_rsv;						/* FAT base */
@@ -6282,7 +6362,7 @@ FRESULT f_mkfs (
 	} else {								/* Volume as a new single partition */
 		if (!(fsopt & FM_SFD)) {			/* Create partition table if not in SFD */
 			lba[0] = sz_vol; lba[1] = 0;
-			fr = create_partition(pdrv, lba, sys, buf);
+			fr = create_partition(pdrv, lba, sys, buf, n_sec_track);
 			if (fr != FR_OK) LEAVE_MKFS(fr);
 		}
 	}
@@ -6303,12 +6383,12 @@ FRESULT f_mkfs (
 FRESULT f_fdisk (
 	BYTE pdrv,			/* Physical drive number */
 	const LBA_t ptbl[],	/* Pointer to the size table for each partitions */
-	void* work			/* Pointer to the working buffer (null: use heap memory) */
+	void* work,			/* Pointer to the working buffer (null: use heap memory) */
+	BYTE n_sec_track	/* Sectors per track for determination of drive CHS. Default 63 */
 )
 {
 	BYTE *buf = (BYTE*)work;
 	DSTATUS stat;
-
 
 	stat = disk_initialize(pdrv);
 	if (stat & STA_NOINIT) return FR_NOT_READY;
@@ -6318,7 +6398,7 @@ FRESULT f_fdisk (
 #endif
 	if (!buf) return FR_NOT_ENOUGH_CORE;
 
-	LEAVE_MKFS(create_partition(pdrv, ptbl, 0x07, buf));
+	LEAVE_MKFS(create_partition(pdrv, ptbl, 0x07, buf, n_sec_track));
 }
 
 #endif /* FF_MULTI_PARTITION */
@@ -6980,3 +7060,87 @@ FRESULT f_setcp (
 }
 #endif	/* FF_CODE_PAGE == 0 */
 
+#if FF_FS_COPY_ENABLE == 1
+/*-----------------------------------------------------------------------*/
+/* Copy file beetwin partishions in into                                 */
+/*-----------------------------------------------------------------------*/
+
+FRESULT f_copy(
+	const TCHAR *old_file,	/* Source file path */
+	const TCHAR *new_file,	/* Distance file patch*/
+	void *buffer,			/* Temporary copy buffer*/
+	UINT buff_size			/* Temporary copy buffer sise*/
+)
+{
+	FIL old_file_f;
+	FIL new_file_f;
+	FRESULT old_file_r;
+	FRESULT new_file_r;
+	FRESULT read_r;
+	FRESULT write_r;
+	FSIZE_t file_res_size = 0;
+	UINT	readed = 1;
+	UINT	writed = 0;
+	FILINFO fno;
+	
+	old_file_r = f_open(&old_file_f, old_file, FA_READ);
+	if (old_file_r == FR_OK)
+	{
+		new_file_r = f_open(&new_file_f, new_file, FA_CREATE_NEW | FA_WRITE);
+		if (new_file_r == FR_OK)
+		{
+			while (readed > 0){
+				read_r  = f_read (&old_file_f, buffer, buff_size, &readed);
+				write_r = f_write(&new_file_f, buffer, readed, 	&writed);
+				file_res_size += writed;
+				if (read_r != FR_OK){
+					DEBUG_PRINT_(LOG_LEVEL_ERR_ONLY, "error", 64 , " Read %d bytes file %s error occupied %d", buff_size, old_file, read_r);
+					return read_r;
+				}
+				if (write_r != FR_OK){
+					DEBUG_PRINT_(LOG_LEVEL_ERR_ONLY, "error", 64 , " Write %d bytes file %s error occupied %d", buff_size, old_file, read_r);
+					return write_r;
+				}
+				if (readed != writed){
+					DEBUG_PRINT_(LOG_LEVEL_ERR_ONLY, "error", 64 , " Difrent read %d and write %d sizes", readed, writed);
+					return FR_MISMATCH_READ_WRITE;
+				}
+				DEBUG_PRINT_(LOG_LEVEL_MAX, "info", 64 , " Read stat %d write stat: %d  readed: %d wroute: %d", read_r, write_r, readed, writed);
+			}
+			
+			new_file_r = f_close(&new_file_f);
+			if (new_file_r != FR_OK){
+				DEBUG_PRINT_(LOG_LEVEL_ERR_ONLY, "error", 64 , " Unable close file %s error occupied %d", new_file, new_file_r);
+				return new_file_r;
+			}
+			old_file_r = f_close(&old_file_f);
+			if (old_file_r != FR_OK){
+				DEBUG_PRINT_(LOG_LEVEL_ERR_ONLY, "error", 64 , " Unable close file %s error occupied %d", old_file, old_file_r);
+				return old_file_r;
+			}
+		}
+		else{
+			DEBUG_PRINT_(LOG_LEVEL_ERR_ONLY, "error", 64 , " Open %s file error occupied %d", new_file, new_file_r);
+			return new_file_r;
+		}
+	}
+	else{
+		DEBUG_PRINT_(LOG_LEVEL_ERR_ONLY, "error", 64 , " Open %s file error occupied %d", old_file, old_file_r);
+		return old_file_r;
+	}
+	
+	read_r = f_stat(old_file, &fno);
+	if (read_r != FR_OK){
+		DEBUG_PRINT_(LOG_LEVEL_ERR_ONLY, "error", 64 , " Read file %s attrs %d", old_file, read_r);
+		return read_r;
+	}
+	
+	write_r = f_utime(new_file, &fno);
+	if (write_r != FR_OK){
+		DEBUG_PRINT_(LOG_LEVEL_ERR_ONLY, "error", 64 , " Write file %s attrs %d", new_file, write_r);
+		return write_r;
+	}
+	
+	return FR_OK;
+}
+#endif	/* FF_FS_COPY_ENABLE */

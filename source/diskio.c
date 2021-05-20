@@ -24,32 +24,23 @@ DSTATUS disk_status (
 	BYTE pdrv		/* Physical drive nmuber to identify the drive */
 )
 {
-	DSTATUS stat;
-	int result;
+	DSTATUS stat = STA_NOINIT;
 
 	switch (pdrv) {
 	case DEV_RAM :
-		result = RAM_disk_status();
-
-		// translate the reslut code here
-
-		return stat;
+		stat = RAM_disk_status();
+		break;
 
 	case DEV_MMC :
-		result = MMC_disk_status();
-
-		// translate the reslut code here
-
-		return stat;
-
+		stat = MMC_disk_status();
+		break;
+		
 	case DEV_USB :
-		result = USB_disk_status();
-
-		// translate the reslut code here
-
-		return stat;
+		stat = USB_disk_status();
+		break;
+		
 	}
-	return STA_NOINIT;
+	return stat;
 }
 
 
@@ -62,32 +53,24 @@ DSTATUS disk_initialize (
 	BYTE pdrv				/* Physical drive nmuber to identify the drive */
 )
 {
-	DSTATUS stat;
-	int result;
+	DSTATUS stat = STA_NOINIT;
 
 	switch (pdrv) {
 	case DEV_RAM :
-		result = RAM_disk_initialize();
-
-		// translate the reslut code here
-
-		return stat;
+		stat = RAM_disk_initialize();
+		break;
 
 	case DEV_MMC :
-		result = MMC_disk_initialize();
-
-		// translate the reslut code here
-
-		return stat;
+		stat = MMC_disk_initialize();
+		break;
 
 	case DEV_USB :
-		result = USB_disk_initialize();
-
-		// translate the reslut code here
-
-		return stat;
+		stat = USB_disk_initialize();
+		DEBUG_PRINT_(LOG_LEVEL_MAX, "info", 0 , "");
+		break;
 	}
-	return STA_NOINIT;
+	DEBUG_PRINT_(LOG_LEVEL_MAX, "info", 64 , " status:%d", stat);
+	return stat;
 }
 
 
@@ -103,42 +86,41 @@ DRESULT disk_read (
 	UINT count		/* Number of sectors to read */
 )
 {
-	DRESULT res;
-	int result;
+	DRESULT res = RES_PARERR;
 
 	switch (pdrv) {
 	case DEV_RAM :
 		// translate the arguments here
 
-		result = RAM_disk_read(buff, sector, count);
+		res = RAM_disk_read(buff, sector, count);
 
 		// translate the reslut code here
 
-		return res;
+		break;
 
 	case DEV_MMC :
 		// translate the arguments here
 
-		result = MMC_disk_read(buff, sector, count);
+		res = MMC_disk_read(buff, sector, count);
 
 		// translate the reslut code here
 
-		return res;
+		break;
 
 	case DEV_USB :
 		// translate the arguments here
 
-		result = USB_disk_read(buff, sector, count);
+		res = USB_disk_read(buff, sector, count);
 
 		// translate the reslut code here
 
-		return res;
+		break;
 	}
 
-	return RES_PARERR;
+	return res;
 }
 
-
+disk_t u;
 
 /*-----------------------------------------------------------------------*/
 /* Write Sector(s)                                                       */
@@ -153,39 +135,38 @@ DRESULT disk_write (
 	UINT count			/* Number of sectors to write */
 )
 {
-	DRESULT res;
-	int result;
+	DRESULT res = RES_PARERR;
 
 	switch (pdrv) {
 	case DEV_RAM :
 		// translate the arguments here
 
-		result = RAM_disk_write(buff, sector, count);
+		res = RAM_disk_write(buff, sector, count);
 
 		// translate the reslut code here
 
-		return res;
+		break;
 
 	case DEV_MMC :
 		// translate the arguments here
 
-		result = MMC_disk_write(buff, sector, count);
+		res = MMC_disk_write(buff, sector, count);
 
 		// translate the reslut code here
 
-		return res;
+		break;
 
 	case DEV_USB :
 		// translate the arguments here
 
-		result = USB_disk_write(buff, sector, count);
+		res = USB_disk_write(buff, sector, count);
 
 		// translate the reslut code here
 
-		return res;
+		break;
 	}
 
-	return RES_PARERR;
+	return res;
 }
 
 #endif
@@ -219,7 +200,32 @@ DRESULT disk_ioctl (
 
 	case DEV_USB :
 
-		// Process of the command the USB drive
+		switch (cmd) {
+		case CTRL_SYNC:     /* Nothing to do */
+			res = RES_OK;
+			DEBUG_PRINT_(LOG_LEVEL_MAX, "info", 64 , " CTRL_SYNC");
+			break;
+
+		case GET_SECTOR_COUNT:  /* Get number of sectors on the drive */
+			//*(LBA_t*)buff = Stat[pdrv].n_sectors;
+			*(LBA_t*)buff = USB_disk_ioctl_GET_SECTOR_COUNT();
+			res = RES_OK;
+			DEBUG_PRINT_(LOG_LEVEL_MAX, "info", 64 , " GET_SECTOR_COUNT");
+			break;
+
+		case GET_SECTOR_SIZE: /* Get size of sector for generic read/write  */
+			//*(WORD*)buff = Stat[pdrv].sz_sector;
+			*(WORD*)buff = USB_disk_ioctl_GET_SECTOR_SIZE();
+			res = RES_OK;
+			DEBUG_PRINT_(LOG_LEVEL_MAX, "info", 64 , " GET_SECTOR_SIZE");
+			break;
+
+		case GET_BLOCK_SIZE:  /* Retrieves erase block size of the flash memory media in unit of sector */
+			*(DWORD*)buff = 1;
+			res = RES_OK;
+			DEBUG_PRINT_(LOG_LEVEL_MAX, "info", 64 , " GET_BLOCK_SIZE");
+			break;
+		}
 
 		return res;
 	}
