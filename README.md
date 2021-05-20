@@ -36,16 +36,16 @@ global variables:
 // Physical drive number 2
 // 3 master parts (1, 2, 3) and master 4 contains 7 logic parts (1..7)
 PARTITION VolToPart[FF_VOLUMES] = { /* {drive, logic drive, extended} */
-	{2, 1, 0},	/* "0:" ==> 1st partition on the phys drive 2 logic drive 1 extended 0(no) */
-	{2, 2, 0},	/* "1:" ==> 2nd partition on the phys drive 2 logic drive 2 extended 0(no) */
-	{2, 3, 0},	/* "2:" ==> 3rd partition on the phys drive 2 logic drive 3 extended 0(no) */
-	{2, 4, 1},	/* "3:" ==> 4rd partition on the phys drive 2 logic drive 4 extended 0(no) */
-	{2, 4, 2},	/* "4:" ==> 4rd partition on the phys drive 2 logic drive 4 extended 1 */
-	{2, 4, 3},	/* "5:" ==> 4rd partition on the phys drive 2 logic drive 4 extended 2 */
-	{2, 4, 4},	/* "6:" ==> 4rd partition on the phys drive 2 logic drive 4 extended 3 */
-	{2, 4, 5},	/* "7:" ==> 4rd partition on the phys drive 2 logic drive 4 extended 4 */
-	{2, 4, 6},	/* "8:" ==> 4rd partition on the phys drive 2 logic drive 4 extended 5 */
-	{2, 4, 7}	/* "9:" ==> 4rd partition on the pd#0 */
+	{2, 1, 0}, /* "0:" ==> 1st partition on the phys drive 2 logic drive 1 extended 0(no) */
+	{2, 2, 0}, /* "1:" ==> 2nd partition on the phys drive 2 logic drive 2 extended 0(no) */
+	{2, 3, 0}, /* "2:" ==> 3rd partition on the phys drive 2 logic drive 3 extended 0(no) */
+	{2, 4, 1}, /* "3:" ==> 4rd partition on the phys drive 2 logic drive 4 extended 0(no) */
+	{2, 4, 2}, /* "4:" ==> 4rd partition on the phys drive 2 logic drive 4 extended 1 */
+	{2, 4, 3}, /* "5:" ==> 4rd partition on the phys drive 2 logic drive 4 extended 2 */
+	{2, 4, 4}, /* "6:" ==> 4rd partition on the phys drive 2 logic drive 4 extended 3 */
+	{2, 4, 5}, /* "7:" ==> 4rd partition on the phys drive 2 logic drive 4 extended 4 */
+	{2, 4, 6}, /* "8:" ==> 4rd partition on the phys drive 2 logic drive 4 extended 5 */
+	{2, 4, 7}  /* "9:" ==> 4rd partition on the pd#0 */
 };
 ```
 3) Aditional volume creationg congig
